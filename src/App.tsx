@@ -23,7 +23,37 @@ function generateTimeIntervals() {
   return intervals;
 }
 
-function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, setMouseIsDown}) {
+function ColorPickerCell({
+  value: initialValue,
+  data: data,
+  row: { index },
+  column: { id },
+  updateMyData,
+  habitColors,
+  setHabitColors,
+}) {
+  const onChange = e => {
+    const newColor = e.target.value;
+    updateMyData(index, id, newColor);
+
+    // Update the habitColors state
+    const habitName = data[index].habit;
+    setHabitColors({
+      ...habitColors,
+      [habitName]: newColor,
+    });
+  };
+
+  return (
+    <input 
+      type="color"
+      value={initialValue} 
+      onChange={onChange}
+    />
+  );
+}
+
+function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, setMouseIsDown, habitColors}) {
   const timeIntervals = generateTimeIntervals();
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -40,19 +70,19 @@ function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, 
       <tbody>
         {timeIntervals.map((time, index) => (
           <tr key={index}>
-            <th>{time}</th> {/* Time interval as row header */}
+            <th style={{ userSelect: 'none' }}>{time}</th> {/* Time interval as row header */}
             {daysOfWeek.map((day, i) => (
-              <td
+            <td
               key={i}
               onMouseDown={() => { handleCellClick(index, i); setMouseIsDown(true); }}
               onMouseUp={() => setMouseIsDown(false)}
               onMouseOver={() => mouseIsDown && handleCellClick(index, i)}
               style={{
                 border: '1px solid black',
-                backgroundColor: schedule[i][index] === selectedHabit ? 'lightblue' : 'white',
+                backgroundColor: habitColors[schedule[i][index]],
               }}
             ></td>
-            ))}
+          ))}
           </tr>
         ))}
       </tbody>
@@ -99,7 +129,7 @@ function EditableCell({
   );
 }
 
-function EditableTable({ data, setData, columns }) {
+function EditableTable({ data, setData, columns, habitColors, setHabitColors }) {
   const {
     getTableProps,
     getTableBodyProps,
@@ -158,26 +188,24 @@ function EditableTable({ data, setData, columns }) {
   );
 }
 
-function RechartsPieChart({ data, setSelectedHabit }) {
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
-
+function RechartsPieChart({ data, setSelectedHabit, habitColors, setHabitColors }) {
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <ResponsiveContainer>
         <PieChart>
-        <Pie
-  dataKey="value"
-  isAnimationActive={false}
-  data={data}
-  cx="50%"
-  cy="50%"
-  outerRadius="50%"
-  fill="#8884d8"
-  label
-  onClick={(data, index) => setSelectedHabit(data.name)}
->
+          <Pie
+            dataKey="value"
+            isAnimationActive={false}
+            data={data}
+            cx="50%"
+            cy="50%"
+            outerRadius="50%"
+            fill="#8884d8"
+            label            
+            onClick={(data, index) => setSelectedHabit(data.name)}
+          >
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <Cell key={`cell-${index}`} fill={habitColors[entry.name]} />
             ))}
           </Pie>
           <Tooltip />
@@ -190,9 +218,11 @@ function RechartsPieChart({ data, setSelectedHabit }) {
 function App() {
   
   const [data, setData] = useState([
-    { habit: 'Running', weeklyFrequency: 3, duration: 30, totalTime: 90 },
-    { habit: 'Reading', weeklyFrequency: 7, duration: 20, totalTime: 140 },
+    { habit: 'Running', weeklyFrequency: 3, duration: 30, totalTime: 90, color: '#00FF00' },
+    { habit: 'Reading', weeklyFrequency: 7, duration: 20, totalTime: 140, color: '#0000FF' },
   ]);
+
+  const [habitColors, setHabitColors] = useState({"Running": "#00FF00", "Reading": "#0000FF"});
 
   const [chartData, setChartData] = useState([]);
 
@@ -282,6 +312,11 @@ function App() {
         accessor: 'totalTime',
         Cell: ({ value }) => value, // Directly render the value
       },
+      {
+        Header: 'Color',
+        accessor: 'color',
+        Cell: props => <ColorPickerCell {...props} data={data} habitColors={habitColors} setHabitColors={setHabitColors} />,
+      },
     ],
     []
   );
@@ -289,15 +324,19 @@ function App() {
   const addRow = () => {
     setData(old => [
       ...old,
-      { habit: '', weeklyFrequency: 0, duration: 0, totalTime: 0 * 0 },
+      { habit: '', weeklyFrequency: 0, duration: 0, totalTime: 0 * 0, color: '#000000' },
     ]);
+    setHabitColors(old => ({
+      ...old,
+      '': '#000000',
+    }));
   };
 
   return (
     <div className="App" style={{ display: 'flex' }}>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
         <div style={{display: 'flex', flexDirection: 'column'}}>
-          <EditableTable data={data} setData={setData} columns={columns} />        
+        <EditableTable data={data} setData={setData} columns={columns} habitColors={habitColors} setHabitColors={setHabitColors} />   
           <button onClick={addRow} className='button'>Add Row</button>
         </div>
         <div style={{width: '100%', display: 'flex', flexDirection: 'column'}}>
@@ -309,9 +348,23 @@ function App() {
           />
           Include unallocated time
         </label>
-        <RechartsPieChart data={chartData} setSelectedHabit={setSelectedHabit} />
+        <label>
+          Selected habit: {selectedHabit} 
+          {selectedHabit && (
+          <div 
+            style={{
+              display: 'inline-block',
+              width: '10px',
+              height: '10px',
+              backgroundColor: habitColors[selectedHabit],
+              marginLeft: '10px',
+            }}
+          />
+          )}
+        </label>
+        <RechartsPieChart data={chartData} setSelectedHabit={setSelectedHabit} habitColors={habitColors} setHabitColors={setHabitColors} />
         <div style={{display: 'flex', overflowY: 'auto', justifyContent: 'center'}} >
-        <WeeklySchedule handleCellClick={handleCellClick} selectedHabit={selectedHabit} schedule={schedule} mouseIsDown={mouseIsDown} setMouseIsDown={setMouseIsDown} />
+        <WeeklySchedule handleCellClick={handleCellClick} selectedHabit={selectedHabit} schedule={schedule} mouseIsDown={mouseIsDown} setMouseIsDown={setMouseIsDown} habitColors={habitColors} />
         </div>
         </div>
       </div>
