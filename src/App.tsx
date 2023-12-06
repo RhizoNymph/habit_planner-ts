@@ -4,6 +4,62 @@ import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { ResponsiveContainer } from 'recharts';
 import './App.css';
 
+function generateTimeIntervals() {
+  const intervals = [];
+  let hours = 0;
+  let minutes = 0;
+
+  for (let i = 0; i < 96; i++) {
+    const time = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    intervals.push(time);
+
+    minutes += 15;
+    if (minutes === 60) {
+      minutes = 0;
+      hours += 1;
+    }
+  }
+
+  return intervals;
+}
+
+function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, setMouseIsDown}) {
+  const timeIntervals = generateTimeIntervals();
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th></th> {/* Empty header for the time intervals column */}
+          {daysOfWeek.map((day, index) => (
+            <th key={index}>{day}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {timeIntervals.map((time, index) => (
+          <tr key={index}>
+            <th>{time}</th> {/* Time interval as row header */}
+            {daysOfWeek.map((day, i) => (
+              <td
+              key={i}
+              onMouseDown={() => { handleCellClick(index, i); setMouseIsDown(true); }}
+              onMouseUp={() => setMouseIsDown(false)}
+              onMouseOver={() => mouseIsDown && handleCellClick(index, i)}
+              style={{
+                border: '1px solid black',
+                backgroundColor: schedule[i][index] === selectedHabit ? 'lightblue' : 'white',
+              }}
+            ></td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function EditableCell({
   value: initialValue,
   row: { index },
@@ -26,13 +82,19 @@ function EditableCell({
     }
   };
 
+  const inputStyle = {
+    fontSize: '1em', 
+    width: '100%', 
+    padding: '10px'
+  };
+
   return (
     <input 
       value={value} 
       onChange={onChange} 
       onBlur={onBlur}       
       onKeyPress={onKeyPress} 
-      style={{ fontSize: '1em', width: '100%', padding: '10px' }} // Add styles here
+      style={inputStyle}
     />
   );
 }
@@ -96,23 +158,24 @@ function EditableTable({ data, setData, columns }) {
   );
 }
 
-function RechartsPieChart({ data }) {
+function RechartsPieChart({ data, setSelectedHabit }) {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <ResponsiveContainer>
         <PieChart>
-          <Pie
-            dataKey="value"
-            isAnimationActive={false}
-            data={data}
-            cx="50%"
-            cy="50%"
-            outerRadius="50%"
-            fill="#8884d8"
-            label
-          >
+        <Pie
+  dataKey="value"
+  isAnimationActive={false}
+  data={data}
+  cx="50%"
+  cy="50%"
+  outerRadius="50%"
+  fill="#8884d8"
+  label
+  onClick={(data, index) => setSelectedHabit(data.name)}
+>
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
@@ -125,12 +188,30 @@ function RechartsPieChart({ data }) {
 }
 
 function App() {
+  
   const [data, setData] = useState([
     { habit: 'Running', weeklyFrequency: 3, duration: 30, totalTime: 90 },
     { habit: 'Reading', weeklyFrequency: 7, duration: 20, totalTime: 140 },
   ]);
 
   const [chartData, setChartData] = useState([]);
+
+  const timeIntervals = generateTimeIntervals();
+  const [selectedHabit, setSelectedHabit] = useState(null);
+  const handleCellClick = (row, col) => {
+    if (selectedHabit) {
+      setSchedule(old => {
+        const newSchedule = [...old];
+        newSchedule[col][row] = selectedHabit;
+        return newSchedule;
+      });
+    }
+  };
+  const [schedule, setSchedule] = useState(
+    Array(7).fill(0).map(() => Array(timeIntervals.length).fill(null))
+  );
+  const [mouseIsDown, setMouseIsDown] = useState(false);
+  const [includeUnallocated, setIncludeUnallocated] = useState(false);
 
   useEffect(() => {
     // Transform the table data into the format expected by the pie chart
@@ -142,17 +223,54 @@ function App() {
     setChartData(newChartData);
   }, [data]);
 
+  useEffect(() => {
+    const handleMouseUp = () => setMouseIsDown(false);
+    window.addEventListener('mouseup', handleMouseUp);
+  
+    return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Calculate total time of all habits
+    const totalTime = data.reduce((sum, item) => sum + item.totalTime, 0);
+  
+    // Calculate total minutes in a week
+    const totalMinutesInWeek = 7 * 24 * 60;
+  
+    // Calculate unallocated time
+    const unallocatedTime = totalMinutesInWeek - totalTime;
+  
+    // Transform the table data into the format expected by the pie chart
+    let newChartData = data.map(item => ({
+      name: item.habit,
+      value: item.totalTime,
+    }));
+  
+    // Include unallocated time if checkbox is checked
+    if (includeUnallocated) {
+      newChartData.push({ name: 'Unallocated', value: unallocatedTime });
+    }
+  
+    setChartData(newChartData);
+  }, [data, includeUnallocated]);
+
   const columns = React.useMemo(
     () => [
       {
         Header: 'Habit',
         accessor: 'habit',
         Cell: EditableCell,
+        minWidth: 200, // minimum width of the column
+        width: 400, // preferred width of the column
+        maxWidth: 800, // maximum width of the column
+      
       },
       {
         Header: 'Weekly Frequency',
         accessor: 'weeklyFrequency',
-        Cell: EditableCell,
+        Cell: EditableCell,        
       },
       {
         Header: 'Duration',
@@ -176,13 +294,26 @@ function App() {
   };
 
   return (
-    <div className="App" style={{ display: 'flex', justifyContent: 'space-between' }}>
-      <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-        <EditableTable data={data} setData={setData} columns={columns} />
-        <button onClick={addRow} className='button'>Add Row</button>
-      </div>
-      <div style={{ width: '50%' }}>
-        <RechartsPieChart data={chartData} />
+    <div className="App" style={{ display: 'flex' }}>
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
+        <div style={{display: 'flex', flexDirection: 'column'}}>
+          <EditableTable data={data} setData={setData} columns={columns} />        
+          <button onClick={addRow} className='button'>Add Row</button>
+        </div>
+        <div style={{width: '100%', display: 'flex', flexDirection: 'column'}}>
+        <label>
+          <input
+            type="checkbox"
+            checked={includeUnallocated}
+            onChange={() => setIncludeUnallocated(!includeUnallocated)}
+          />
+          Include unallocated time
+        </label>
+        <RechartsPieChart data={chartData} setSelectedHabit={setSelectedHabit} />
+        <div style={{display: 'flex', overflowY: 'auto', justifyContent: 'center'}} >
+        <WeeklySchedule handleCellClick={handleCellClick} selectedHabit={selectedHabit} schedule={schedule} mouseIsDown={mouseIsDown} setMouseIsDown={setMouseIsDown} />
+        </div>
+        </div>
       </div>
     </div>
   );
