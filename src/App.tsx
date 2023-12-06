@@ -25,10 +25,10 @@ function generateTimeIntervals() {
 
 function ColorPickerCell({
   value: initialValue,
-  data: data,
-  row: { index },
+  row: { index, values },
   column: { id },
   updateMyData,
+  data,
   habitColors,
   setHabitColors,
 }) {
@@ -36,12 +36,14 @@ function ColorPickerCell({
     const newColor = e.target.value;
     updateMyData(index, id, newColor);
 
-    // Update the habitColors state
-    const habitName = data[index].habit;
-    setHabitColors({
-      ...habitColors,
-      [habitName]: newColor,
-    });
+    // Update the habitColors state    
+    const habitName = values.habit;
+    if (habitName) {
+      setHabitColors({
+        ...habitColors,
+        [habitName]: newColor,
+      });
+    }
   };
 
   return (
@@ -63,7 +65,7 @@ function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, 
         <tr>
           <th></th> {/* Empty header for the time intervals column */}
           {daysOfWeek.map((day, index) => (
-            <th key={index}>{day}</th>
+            <th key={index} className="sticky-header">{day}</th>
           ))}
         </tr>
       </thead>
@@ -78,7 +80,7 @@ function WeeklySchedule({handleCellClick, selectedHabit, schedule, mouseIsDown, 
               onMouseUp={() => setMouseIsDown(false)}
               onMouseOver={() => mouseIsDown && handleCellClick(index, i)}
               style={{
-                border: '1px solid black',
+                border: '1px solid #777',
                 backgroundColor: habitColors[schedule[i][index]],
               }}
             ></td>
@@ -95,12 +97,22 @@ function EditableCell({
   row: { index },
   column: { id },
   updateMyData,
+  data,
+  habitColors,
+  setHabitColors,
 }) {
   const [value, setValue] = useState(initialValue);
 
   const onChange = e => {
-    setValue(e.target.value);
-  };
+    const newValue = e.target.value;
+    setValue(newValue);
+    if (e.id === 'habit') {
+      setHabitColors(old => ({
+        ...old,
+        [newValue]: old[initialValue],
+      }));
+    }
+  }; 
 
   const onBlur = () => {
     updateMyData(index, id, value);
@@ -108,7 +120,7 @@ function EditableCell({
 
   const onKeyPress = e => {
     if (e.key === 'Enter') {
-      updateMyData(index, id, value);
+      onBlur();
     }
   };
 
@@ -193,21 +205,38 @@ function RechartsPieChart({ data, setSelectedHabit, habitColors, setHabitColors 
     <div style={{ width: '100%', height: '100%' }}>
       <ResponsiveContainer>
         <PieChart>
-          <Pie
-            dataKey="value"
-            isAnimationActive={false}
-            data={data}
-            cx="50%"
-            cy="50%"
-            outerRadius="50%"
-            fill="#8884d8"
-            label            
-            onClick={(data, index) => setSelectedHabit(data.name)}
-          >
-            {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={habitColors[entry.name]} />
-            ))}
-          </Pie>
+        <Pie
+        dataKey="value"
+        isAnimationActive={false}
+        data={data}          
+        cx="50%"
+        cy="50%"
+        outerRadius="50%"
+        fill="#8884d8"
+        label={({ name, value, percent, payload }) => {
+          const type = payload.type ? payload.type.charAt(0).toUpperCase() + payload.type.slice(1) : '';
+          return `${type}: ${name} ${value} (${(percent * 100).toFixed(0)}%)`;
+        }}
+        onClick={(data, index) => setSelectedHabit(data.name)}          
+      >
+  {data.map((entry, index) => (
+    <Cell 
+      key={`cell-${index}`} 
+      fill={entry.type === 'allocated' ? habitColors[entry.name] : `url(#diagonalHatch-${index})`}
+    />
+  ))}
+</Pie>
+<defs>
+  {data.map((entry, index) => (
+    <pattern id={`diagonalHatch-${index}`} patternUnits="userSpaceOnUse" width="4" height="4">
+      <path d="M-1,1 l2,-2
+               M0,4 l4,-4
+               M3,5 l2,-2" 
+            style={{ stroke: habitColors[entry.name], strokeWidth: 1 }}
+      />
+    </pattern>
+  ))}
+</defs>
           <Tooltip />
         </PieChart>
       </ResponsiveContainer>
@@ -217,31 +246,31 @@ function RechartsPieChart({ data, setSelectedHabit, habitColors, setHabitColors 
 
 function App() {
   
-  const [data, setData] = useState([
-    { habit: 'Running', weeklyFrequency: 3, duration: 30, totalTime: 90, color: '#00FF00' },
-    { habit: 'Reading', weeklyFrequency: 7, duration: 20, totalTime: 140, color: '#0000FF' },
+  const [data, setData] = useState(() => JSON.parse(localStorage.getItem('data')) || [
+    { habit: 'Cardio', weeklyFrequency: 5, duration: 20, totalTime: 5*20, color: '#00FF00' },
+    { habit: 'Yoga', weeklyFrequency: 3, duration: 20, totalTime: 3*20, color: '#0000FF' },
   ]);
+  
+  const [habitColors, setHabitColors] = useState(() => JSON.parse(localStorage.getItem('habitColors')) || {"Cardio": "#00FF00", "Yoga": "#0000FF"});
 
-  const [habitColors, setHabitColors] = useState({"Running": "#00FF00", "Reading": "#0000FF"});
-
-  const [chartData, setChartData] = useState([]);
+  const [chartData, setChartData] = useState(() => JSON.parse(localStorage.getItem('chartData')) || []);
 
   const timeIntervals = generateTimeIntervals();
-  const [selectedHabit, setSelectedHabit] = useState(null);
+  const [selectedHabit, setSelectedHabit] = useState(() => localStorage.getItem('selectedHabit') || null);
   const handleCellClick = (row, col) => {
     if (selectedHabit) {
       setSchedule(old => {
         const newSchedule = [...old];
-        newSchedule[col][row] = selectedHabit;
+        // If the cell already contains the selected habit, set it to null
+        // Otherwise, set it to the selected habit
+        newSchedule[col][row] = newSchedule[col][row] === selectedHabit ? null : selectedHabit;
         return newSchedule;
       });
     }
   };
-  const [schedule, setSchedule] = useState(
-    Array(7).fill(0).map(() => Array(timeIntervals.length).fill(null))
-  );
+  const [schedule, setSchedule] = useState(() => JSON.parse(localStorage.getItem('schedule')) || Array(7).fill(0).map(() => Array(timeIntervals.length).fill(null)));
   const [mouseIsDown, setMouseIsDown] = useState(false);
-  const [includeUnallocated, setIncludeUnallocated] = useState(false);
+  const [includeUnallocated, setIncludeUnallocated] = useState(() => JSON.parse(localStorage.getItem('includeUnallocated')) || false);
 
   useEffect(() => {
     // Transform the table data into the format expected by the pie chart
@@ -272,26 +301,36 @@ function App() {
     // Calculate unallocated time
     const unallocatedTime = totalMinutesInWeek - totalTime;
   
+    // Calculate the total scheduled time for each habit
+    const scheduledTimes = schedule.flat().reduce((acc, habit) => {
+      if (habit) {
+        acc[habit] = (acc[habit] || 0) + 15;
+      }
+      return acc;
+    }, {});
+  
     // Transform the table data into the format expected by the pie chart
-    let newChartData = data.map(item => ({
-      name: item.habit,
-      value: item.totalTime,
-    }));
+    let newChartData = data.flatMap(item => [
+      { name: item.habit, value: item.totalTime, type: 'allocated' },
+      { name: item.habit, value: scheduledTimes[item.habit] || 0, type: 'scheduled' },
+    ]);
   
     // Include unallocated time if checkbox is checked
     if (includeUnallocated) {
-      newChartData.push({ name: 'Unallocated', value: unallocatedTime });
+      newChartData = [...newChartData, { name: 'Unallocated', value: unallocatedTime, type: 'Unallocated' }];
+    } else {
+      newChartData = newChartData.filter(item => item.type !== 'Unallocated');
     }
   
     setChartData(newChartData);
-  }, [data, includeUnallocated]);
+  }, [data, schedule, includeUnallocated]);
 
   const columns = React.useMemo(
     () => [
       {
         Header: 'Habit',
         accessor: 'habit',
-        Cell: EditableCell,
+        Cell: props => <EditableCell {...props} data={data} habitColors={habitColors} setHabitColors={setHabitColors} />,
         minWidth: 200, // minimum width of the column
         width: 400, // preferred width of the column
         maxWidth: 800, // maximum width of the column
@@ -322,15 +361,25 @@ function App() {
   );
 
   const addRow = () => {
+    const placeholder = (data.length + 1).toString();
     setData(old => [
       ...old,
-      { habit: '', weeklyFrequency: 0, duration: 0, totalTime: 0 * 0, color: '#000000' },
+      { habit: placeholder, weeklyFrequency: 1, duration: 15, totalTime: 1 * 15, color: '#000000' },
     ]);
     setHabitColors(old => ({
       ...old,
-      '': '#000000',
+      placeholder: '#000000',
     }));
   };
+
+  useEffect(() => {
+    localStorage.setItem('data', JSON.stringify(data));
+    localStorage.setItem('habitColors', JSON.stringify(habitColors));
+    localStorage.setItem('chartData', JSON.stringify(chartData));
+    localStorage.setItem('selectedHabit', selectedHabit);
+    localStorage.setItem('schedule', JSON.stringify(schedule));    
+    localStorage.setItem('includeUnallocated', JSON.stringify(includeUnallocated));
+  }, [data, habitColors, chartData, selectedHabit, schedule, includeUnallocated]); 
 
   return (
     <div className="App" style={{ display: 'flex' }}>

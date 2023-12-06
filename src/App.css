@@ -1,6 +1,13 @@
 body {
-  background-color: #333;
+  background-color: #181818;
   color: #fff;
+}
+
+.sticky-header {
+  position: sticky;
+  top: 0;
+  background-color: #181818; /* To ensure the header is not transparent */
+  z-index: 1; /* To ensure the header is above the table rows */
 }
 
 .App {
