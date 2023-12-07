@@ -106,13 +106,18 @@ function EditableCell({
   const onChange = e => {
     const newValue = e.target.value;
     setValue(newValue);
-    if (e.id === 'habit') {
-      setHabitColors(old => ({
-        ...old,
-        [newValue]: old[initialValue],
-      }));
+    if (id === 'habit') {
+      setHabitColors(old => {
+        const newColors = { ...old };
+        // If the habit name has been changed, update the color mapping
+        if (old[initialValue]) {
+          newColors[newValue] = old[initialValue];
+          delete newColors[initialValue];
+        }
+        return newColors;
+      });
     }
-  }; 
+  };
 
   const onBlur = () => {
     updateMyData(index, id, value);
@@ -271,7 +276,7 @@ function App() {
   const [schedule, setSchedule] = useState(() => JSON.parse(localStorage.getItem('schedule')) || Array(7).fill(0).map(() => Array(timeIntervals.length).fill(null)));
   const [mouseIsDown, setMouseIsDown] = useState(false);
   const [includeUnallocated, setIncludeUnallocated] = useState(() => JSON.parse(localStorage.getItem('includeUnallocated')) || false);
-
+  const [includeSleep, setIncludeSleep] = useState(() => JSON.parse(localStorage.getItem('includeSleep')) || false);
   useEffect(() => {
     // Transform the table data into the format expected by the pie chart
     const newChartData = data.map(item => ({
@@ -321,9 +326,17 @@ function App() {
     } else {
       newChartData = newChartData.filter(item => item.type !== 'Unallocated');
     }
+
+    // Include sleep time if checkbox is checked
+    if (includeSleep) {
+      // Find the 'Sleep' habit in the data array
+
+    } else {
+      newChartData = newChartData.filter(item => item.name !== 'Sleep');
+    }
   
     setChartData(newChartData);
-  }, [data, schedule, includeUnallocated]);
+  }, [data, schedule, includeUnallocated, includeSleep]);
 
   const columns = React.useMemo(
     () => [
@@ -379,7 +392,8 @@ function App() {
     localStorage.setItem('selectedHabit', selectedHabit);
     localStorage.setItem('schedule', JSON.stringify(schedule));    
     localStorage.setItem('includeUnallocated', JSON.stringify(includeUnallocated));
-  }, [data, habitColors, chartData, selectedHabit, schedule, includeUnallocated]); 
+    localStorage.setItem('includeSleep', JSON.stringify(includeSleep));
+  }, [data, habitColors, chartData, selectedHabit, schedule, includeUnallocated, includeSleep]); 
 
   return (
     <div className="App" style={{ display: 'flex' }}>
@@ -397,6 +411,14 @@ function App() {
           />
           Include unallocated time
         </label>
+        <label>
+        <input
+          type="checkbox"
+          checked={includeSleep}
+          onChange={() => setIncludeSleep(!includeSleep)}
+        />
+        Include Sleep
+      </label>
         <label>
           Selected habit: {selectedHabit} 
           {selectedHabit && (
