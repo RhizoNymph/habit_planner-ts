@@ -258,7 +258,8 @@ function App() {
   
   const [habitColors, setHabitColors] = useState(() => JSON.parse(localStorage.getItem('habitColors')) || {"Cardio": "#00FF00", "Yoga": "#0000FF"});
 
-  const [chartData, setChartData] = useState(() => JSON.parse(localStorage.getItem('chartData')) || []);
+  const [chartData, setChartData] = useState([]);
+  const [includeUnallocated, setIncludeUnallocated] = useState(false);
 
   const timeIntervals = generateTimeIntervals();
   const [selectedHabit, setSelectedHabit] = useState(() => localStorage.getItem('selectedHabit') || null);
@@ -278,14 +279,21 @@ function App() {
   const [includeUnallocated, setIncludeUnallocated] = useState(() => JSON.parse(localStorage.getItem('includeUnallocated')) || false);
   const [includeSleep, setIncludeSleep] = useState(() => JSON.parse(localStorage.getItem('includeSleep')) || false);
   useEffect(() => {
-    // Transform the table data into the format expected by the pie chart
-    const newChartData = data.map(item => ({
+    let newChartData = data.map(item => ({
       name: item.habit,
       value: item.totalTime,
     }));
 
+    if (includeUnallocated) {
+      const totalAllocatedTime = data.reduce((sum, item) => sum + item.totalTime, 0);
+      const totalMinutesInWeek = 7 * 24 * 60;
+      const unallocatedTime = totalMinutesInWeek - totalAllocatedTime;
+
+      newChartData = [...newChartData, { name: 'Unallocated', value: unallocatedTime }];
+    }
+
     setChartData(newChartData);
-  }, [data]);
+  }, [data, includeUnallocated])
 
   useEffect(() => {
     const handleMouseUp = () => setMouseIsDown(false);
@@ -385,59 +393,19 @@ function App() {
     }));
   };
 
-  useEffect(() => {
-    localStorage.setItem('data', JSON.stringify(data));
-    localStorage.setItem('habitColors', JSON.stringify(habitColors));
-    localStorage.setItem('chartData', JSON.stringify(chartData));
-    localStorage.setItem('selectedHabit', selectedHabit);
-    localStorage.setItem('schedule', JSON.stringify(schedule));    
-    localStorage.setItem('includeUnallocated', JSON.stringify(includeUnallocated));
-    localStorage.setItem('includeSleep', JSON.stringify(includeSleep));
-  }, [data, habitColors, chartData, selectedHabit, schedule, includeUnallocated, includeSleep]); 
-
   return (
-    <div className="App" style={{ display: 'flex' }}>
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }}>
-        <div style={{display: 'flex', flexDirection: 'column'}}>
-        <EditableTable data={data} setData={setData} columns={columns} habitColors={habitColors} setHabitColors={setHabitColors} />   
-          <button onClick={addRow} className='button'>Add Row</button>
-        </div>
-        <div style={{width: '100%', display: 'flex', flexDirection: 'column'}}>
+    <div className="App" style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
         <label>
-          <input
-            type="checkbox"
-            checked={includeUnallocated}
-            onChange={() => setIncludeUnallocated(!includeUnallocated)}
-          />
-          Include unallocated time
+          <input type="checkbox" checked={includeUnallocated} onChange={e => setIncludeUnallocated(e.target.checked)} />
+          Include Unallocated Time
         </label>
-        <label>
-        <input
-          type="checkbox"
-          checked={includeSleep}
-          onChange={() => setIncludeSleep(!includeSleep)}
-        />
-        Include Sleep
-      </label>
-        <label>
-          Selected habit: {selectedHabit} 
-          {selectedHabit && (
-          <div 
-            style={{
-              display: 'inline-block',
-              width: '10px',
-              height: '10px',
-              backgroundColor: habitColors[selectedHabit],
-              marginLeft: '10px',
-            }}
-          />
-          )}
-        </label>
-        <RechartsPieChart data={chartData} setSelectedHabit={setSelectedHabit} habitColors={habitColors} setHabitColors={setHabitColors} />
-        <div style={{display: 'flex', overflowY: 'auto', justifyContent: 'center'}} >
-        <WeeklySchedule handleCellClick={handleCellClick} selectedHabit={selectedHabit} schedule={schedule} mouseIsDown={mouseIsDown} setMouseIsDown={setMouseIsDown} habitColors={habitColors} />
-        </div>
-        </div>
+        <EditableTable data={data} setData={setData} columns={columns} />
+        <button onClick={addRow}>Add Row</button>
+      </div>
+      <div style={{ width: '50%' }}>
+        <RechartsPieChart data={chartData} />
+
       </div>
     </div>
   );
